@@ -1,177 +1,165 @@
-from Xlib import X, XK, display, Xutil
-import subprocess
-import os
+from Xlib import X, display, Xutil, Xatom
+from Xlib.protocol import event
+import sys
 import time
 
-disp = display.Display()
-root = disp.screen().root
 
-MOD = X.Mod1Mask
-KEYS = {
-    'J': XK.XK_j,
-    'K': XK.XK_k,
-    'Return': XK.XK_Return,
-    'Q': XK.XK_q
-}
+dpy = display.Display()
+screen = dpy.screen()
+root = screen.root
 
-IPC_FILE = "/tmp/pwdesk_ipc"
-NUM_WORKSPACES = 9
-workspaces = [[] for _ in range(NUM_WORKSPACES)]
-current_ws = 0
-focus_idx = 0
+windows = {}  # client_id: {frame, titlebar, client, is_minimized, geometry}
 
-drag_win = None
-drag_start = (0, 0)
-drag_mode = None
+# Taskbar (list of buttons)
+taskbar_height = 24
+taskbar = root.create_window(
+    0, screen.height_in_pixels - taskbar_height,
+    screen.width_in_pixels, taskbar_height,
+    0,
+    screen.root_depth,
+    X.InputOutput,
+    X.CopyFromParent,
+    background_pixel=0x222222,
+    event_mask=X.ExposureMask | X.ButtonPressMask
+)
+taskbar.map()
 
-def grab_keys():
-    for keysym in KEYS.values():
-        code = disp.keysym_to_keycode(keysym)
-        root.grab_key(code, MOD, True, X.GrabModeAsync, X.GrabModeAsync)
 
-    for i in range(1, 10):
-        code = disp.keysym_to_keycode(XK.XK_0 + i)
-        root.grab_key(code, MOD, True, X.GrabModeAsync, X.GrabModeAsync)
+# Global drag tracking
+dragging = None
 
-def tile_windows():
-    clients = workspaces[current_ws]
-    if not clients:
-        return
+def create_frame(client):
+    geom = client.get_geometry()
+    width = geom.width
+    height = geom.height
+    x, y = 100, 100
 
-    screen = disp.screen()
-    sw = screen.width_in_pixels
-    sh = screen.height_in_pixels
-
-    master_size = int(sw * 0.6)
-    stack_size = sw - master_size
-
-    for i, win in enumerate(clients):
-        try:
-            if i == 0:
-                win.configure(x=0, y=0, width=master_size, height=sh, border_width=1)
-            else:
-                h = sh // (len(clients) - 1)
-                win.configure(x=master_size, y=(i - 1) * h, width=stack_size, height=h, border_width=1)
-            win.map()
-        except:
-            pass
-
-def focus_window(index):
-    clients = workspaces[current_ws]
-    if not clients:
-        return
-    try:
-        win = clients[index]
-        win.set_input_focus(X.RevertToPointerRoot, X.CurrentTime)
-        win.raise_window()
-    except:
-        pass
-
-def change_workspace(n):
-    global current_ws, focus_idx
-    for win in workspaces[current_ws]:
-        try:
-            win.unmap()
-        except:
-            pass
-
-    current_ws = n
-    focus_idx = 0
-    tile_windows()
-    focus_window(focus_idx)
-
-    with open(IPC_FILE, "w") as f:
-        f.write(str(current_ws + 1))
-
-def handle_key(event):
-    global focus_idx
-    keysym = disp.keycode_to_keysym(event.detail, 0)
-
-    if keysym == KEYS['J']:
-        if workspaces[current_ws]:
-            focus_idx = (focus_idx + 1) % len(workspaces[current_ws])
-            focus_window(focus_idx)
-    elif keysym == KEYS['K']:
-        if workspaces[current_ws]:
-            focus_idx = (focus_idx - 1) % len(workspaces[current_ws])
-            focus_window(focus_idx)
-    elif keysym == KEYS['Return']:
-        subprocess.Popen(["xterm"])
-    elif keysym == KEYS['Q']:
-        print("Выход из WM")
-        os._exit(0)
-    elif XK.XK_1 <= keysym <= XK.XK_9:
-        ws = keysym - XK.XK_1
-        if ws < NUM_WORKSPACES:
-            change_workspace(ws)
-
-def setup():
-    root.change_attributes(
-        event_mask=X.SubstructureRedirectMask |
-                   X.SubstructureNotifyMask |
-                   X.ButtonPressMask |
-                   X.ButtonReleaseMask |
-                   X.ButtonMotionMask |
-                   X.KeyPressMask
+    frame = root.create_window(
+        x, y,
+        width, height + 24,
+        1,
+        dpy.screen().root_depth,
+        X.InputOutput,
+        X.CopyFromParent,
+        background_pixel=0xaaaaaa,
+        event_mask=X.ExposureMask | X.SubstructureRedirectMask | X.ButtonPressMask | X.ButtonReleaseMask | X.PointerMotionMask
     )
-    grab_keys()
 
-    subprocess.Popen(["python3", os.path.abspath("desk.py")])
+    titlebar = frame.create_window(
+        0, 0,
+        width, 24,
+        0,
+        dpy.screen().root_depth,
+        X.InputOutput,
+        X.CopyFromParent,
+        background_pixel=0x444444,
+        event_mask=X.ButtonPressMask | X.ButtonReleaseMask | X.PointerMotionMask
+    )
 
-    #wallpaper_path = os.path.expanduser("~/Pictures/wallpaper.jpg")
-    #if os.path.exists(wallpaper_path):
-        #subprocess.Popen(["feh", "--bg-scale", wallpaper_path])
+    # Reparent client window
+    client.reparent(frame, 0, 24)
+    client.map()
+    titlebar.map()
+    frame.map()
 
-    with open(IPC_FILE, "w") as f:
-        f.write(str(current_ws + 1))
+    windows[client.id] = {
+        'frame': frame,
+        'titlebar': titlebar,
+        'client': client,
+        'is_minimized': False,
+        'geometry': (x, y, width, height)
+    }
 
-setup()
+    dpy.flush()
 
-print("PWDesk WM запущен. Alt+Enter - терминал, Alt+J/K - фокус, Alt+1-9 - WS, Alt+Q - выход")
-print("Alt + ЛКМ - перемещение окна, Alt + ПКМ - ресайз окна")
+def minimize_window(client_id):
+    win = windows[client_id]
+    win['frame'].unmap()
+    win['is_minimized'] = True
+    add_taskbar_button(client_id)
+    dpy.flush()
 
-while True:
-    event = disp.next_event()
+def restore_window(client_id):
+    win = windows[client_id]
+    win['frame'].map()
+    win['is_minimized'] = False
+    dpy.flush()
 
-    if event.type == X.MapRequest:
-        win = event.window
-        workspaces[current_ws].append(win)
-        tile_windows()
+def add_taskbar_button(client_id):
+    idx = list(windows.keys()).index(client_id)
+    btn_width = 100
+    btn = taskbar.create_window(
+        idx * btn_width, 0,
+        btn_width - 2, taskbar_height,
+        0,
+        dpy.screen().root_depth,
+        X.InputOutput,
+        X.CopyFromParent,
+        background_pixel=0x666666,
+        event_mask=X.ButtonPressMask
+    )
+    btn.map()
+    windows[client_id]['task_button'] = btn
 
-    elif event.type == X.DestroyNotify:
-        for ws in workspaces:
-            ws[:] = [w for w in ws if w.id != event.window.id]
-        tile_windows()
 
-    elif event.type == X.KeyPress:
-        handle_key(event)
+def handle_map_request(e):
+    win = e.window
+    if win.id in windows:
+        return
+    win.change_attributes(event_mask=X.FocusChangeMask)
+    create_frame(win)
 
-    elif event.type == X.ButtonPress:
-        if event.state & MOD:
-            drag_win = event.child
-            drag_start = (event.root_x, event.root_y)
-            if event.detail == 1:
-                drag_mode = "move"
-            elif event.detail == 3:
-                drag_mode = "resize"
+def handle_button_press(e):
+    global dragging
+    for cid, win in windows.items():
+        if win['titlebar'].id == e.window.id:
+            if e.detail == 1:  # left click drag
+                dragging = {
+                    'client_id': cid,
+                    'start_pos': (e.root_x, e.root_y),
+                    'start_geom': win['frame'].get_geometry()
+                }
+            elif e.detail == 3:  # right click to minimize
+                minimize_window(cid)
 
-    elif event.type == X.ButtonRelease:
-        drag_win = None
-        drag_mode = None
+        elif win.get('task_button') and win['task_button'].id == e.window.id:
+            restore_window(cid)
+            win['task_button'].unmap()
+            del win['task_button']
 
-    elif event.type == X.MotionNotify:
-        if 'drag_win' in globals() and drag_win and drag_mode:
-            dx = event.root_x - drag_start[0]
-            dy = event.root_y - drag_start[1]
-            try:
-                geom = drag_win.get_geometry()
-                if drag_mode == "move":
-                    drag_win.configure(x=geom.x + dx, y=geom.y + dy)
-                elif drag_mode == "resize":
-                    drag_win.configure(width=max(geom.width + dx, 100),
-                                       height=max(geom.height + dy, 100))
-            except:
-                pass
-            drag_start = (event.root_x, event.root_y)
 
-    disp.sync()
+def handle_motion(e):
+    global dragging
+    if dragging:
+        dx = e.root_x - dragging['start_pos'][0]
+        dy = e.root_y - dragging['start_pos'][1]
+        cid = dragging['client_id']
+        geom = dragging['start_geom']
+        windows[cid]['frame'].configure(x=geom.x + dx, y=geom.y + dy)
+        dpy.flush()
+
+def handle_button_release(e):
+    global dragging
+    dragging = None
+
+def main():
+    root.change_attributes(event_mask=X.SubstructureRedirectMask | X.SubstructureNotifyMask)
+    dpy.flush()
+
+    while True:
+        if dpy.pending_events():
+            e = dpy.next_event()
+
+            if isinstance(e, event.MapRequest):
+                handle_map_request(e)
+            elif isinstance(e, event.ButtonPress):
+                handle_button_press(e)
+            elif isinstance(e, event.MotionNotify):
+                handle_motion(e)
+            elif isinstance(e, event.ButtonRelease):
+                handle_button_release(e)
+        else:
+            time.sleep(0.01)
+
+if __name__ == "__main__":
+    main()
