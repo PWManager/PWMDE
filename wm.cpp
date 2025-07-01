@@ -1,6 +1,3 @@
-// PwdeskWM (C++) — минимальный WM с drag окнами и запуском внешнего меню
-// Требует: Xlib, POSIX
-
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/Xatom.h>
@@ -8,6 +5,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <map>
+#include <cstdio>
 
 struct ClientWindow {
     Window win;
@@ -17,11 +15,6 @@ struct ClientWindow {
 Display* dpy;
 Window root;
 std::map<Window, ClientWindow> windows;
-
-bool dragging = false;
-Window drag_win;
-int drag_start_x, drag_start_y;
-int win_start_x, win_start_y;
 
 void create_window(Window win) {
     XWindowAttributes attr;
@@ -36,7 +29,8 @@ void create_window(Window win) {
     ClientWindow cw = { win, x, y, attr.width, attr.height };
     windows[win] = cw;
 
-    XSelectInput(dpy, win, FocusChangeMask | ButtonPressMask | ButtonReleaseMask | PointerMotionMask);
+    // Подписываемся только на фокус и кнопки без motion events
+    XSelectInput(dpy, win, FocusChangeMask | ButtonPressMask | ButtonReleaseMask);
 }
 
 void handle_map_request(XEvent* ev) {
@@ -47,36 +41,15 @@ void handle_map_request(XEvent* ev) {
 }
 
 void handle_button_press(XEvent* ev) {
-    Window win = ev->xbutton.window;
-    if (windows.count(win)) {
-        if (ev->xbutton.button == Button1) {
-            dragging = true;
-            drag_win = win;
-            drag_start_x = ev->xbutton.x_root;
-            drag_start_y = ev->xbutton.y_root;
-
-            Window junk;
-            int rx, ry;
-            unsigned int bw, d;
-            XGetGeometry(dpy, win, &junk, &win_start_x, &win_start_y, &d, &d, &bw, &d);
-        }
-    }
+    // Тут ничего не делаем — отключаем drag
 }
 
 void handle_motion(XEvent* ev) {
-    if (dragging && windows.count(drag_win)) {
-        int dx = ev->xmotion.x_root - drag_start_x;
-        int dy = ev->xmotion.y_root - drag_start_y;
-        int nx = win_start_x + dx;
-        int ny = win_start_y + dy;
-        XMoveWindow(dpy, drag_win, nx, ny);
-    }
+    // Никакого перемещения
 }
 
 void handle_button_release(XEvent* ev) {
-    if (ev->xbutton.button == Button1 && dragging) {
-        dragging = false;
-    }
+    // Никакого drag, ничего не делаем
 }
 
 void spawn_menu() {
