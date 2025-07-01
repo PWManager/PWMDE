@@ -159,7 +159,7 @@ def main():
             elif isinstance(e, event.ButtonRelease):
                 handle_button_release(e)
         else:
-            time.sleep(0.01)
+            pass
 
 if __name__ == "__main__":
     main()
