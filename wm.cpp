@@ -1,9 +1,6 @@
 #include <X11/Xlib.h>
-#include <X11/Xutil.h>
-#include <X11/Xatom.h>
-#include <unistd.h>
-#include <cstdlib>
 #include <cstdio>
+#include <cstdlib>
 #include <map>
 
 struct ClientWindow {
@@ -23,32 +20,18 @@ int x_error_handler(Display* dpy, XErrorEvent* err) {
 }
 
 void create_window(Window win) {
-    XWindowAttributes attr;
-    XGetWindowAttributes(dpy, win, &attr);
-
     int x = 100, y = 100;
-    int width = attr.width;
-    int height = attr.height;
 
-    // Репарентим окно в root и задаём позицию и размер
+    // Репарентим в root и мапим
     XReparentWindow(dpy, win, root, x, y);
-
-    XWindowChanges changes;
-    changes.x = x;
-    changes.y = y;
-    changes.width = width;
-    changes.height = height;
-    XConfigureWindow(dpy, win, CWX | CWY | CWWidth | CWHeight, &changes);
-
     XMapWindow(dpy, win);
 
-    ClientWindow cw = {win, x, y, width, height};
-    windows[win] = cw;
+    // Подписываемся на StructureNotifyMask, чтобы ловить ConfigureNotify
+    XSelectInput(dpy, win, StructureNotifyMask);
 
-    // Подписываемся на события для окна
-    XSelectInput(dpy, win, FocusChangeMask | ButtonPressMask | ButtonReleaseMask);
-    
-    printf("Created window %lu at %d,%d size %dx%d\n", win, x, y, width, height);
+    windows[win] = {win, x, y, 0, 0};
+
+    printf("Window %lu reparented and mapped\n", win);
 }
 
 void handle_map_request(XEvent* ev) {
@@ -58,16 +41,16 @@ void handle_map_request(XEvent* ev) {
     }
 }
 
-void handle_button_press(XEvent* ev) {
-    // Перетаскивание отключено
-}
-
-void handle_motion(XEvent* ev) {
-    // Нет перетаскивания
-}
-
-void handle_button_release(XEvent* ev) {
-    // Нет перетаскивания
+void handle_configure_notify(XEvent* ev) {
+    Window win = ev->xconfigure.window;
+    if (windows.count(win)) {
+        ClientWindow& cw = windows[win];
+        cw.x = ev->xconfigure.x;
+        cw.y = ev->xconfigure.y;
+        cw.width = ev->xconfigure.width;
+        cw.height = ev->xconfigure.height;
+        printf("ConfigureNotify: win %lu pos %d,%d size %dx%d\n", win, cw.x, cw.y, cw.width, cw.height);
+    }
 }
 
 void spawn_menu() {
@@ -88,8 +71,14 @@ int main() {
 
     root = DefaultRootWindow(dpy);
 
-    // Пытаемся перехватить управление окнами
-    XSelectInput(dpy, root, SubstructureRedirectMask | SubstructureNotifyMask);
+    // Перехватываем попытки создать окна
+    if (XSelectInput(dpy, root, SubstructureRedirectMask | SubstructureNotifyMask) == 0) {
+        fprintf(stderr, "Successfully selected SubstructureRedirectMask on root window\n");
+    } else {
+        fprintf(stderr, "Failed to select SubstructureRedirectMask. Is another WM running?\n");
+        return 1;
+    }
+
     XFlush(dpy);
 
     spawn_menu();
@@ -102,14 +91,8 @@ int main() {
             case MapRequest:
                 handle_map_request(&ev);
                 break;
-            case ButtonPress:
-                handle_button_press(&ev);
-                break;
-            case MotionNotify:
-                handle_motion(&ev);
-                break;
-            case ButtonRelease:
-                handle_button_release(&ev);
+            case ConfigureNotify:
+                handle_configure_notify(&ev);
                 break;
             default:
                 break;
