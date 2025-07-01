@@ -3,9 +3,8 @@
 #include <X11/Xatom.h>
 #include <unistd.h>
 #include <cstdlib>
-#include <cstring>
-#include <map>
 #include <cstdio>
+#include <map>
 
 struct ClientWindow {
     Window win;
@@ -16,21 +15,40 @@ Display* dpy;
 Window root;
 std::map<Window, ClientWindow> windows;
 
+int x_error_handler(Display* dpy, XErrorEvent* err) {
+    char err_msg[1024];
+    XGetErrorText(dpy, err->error_code, err_msg, sizeof(err_msg));
+    fprintf(stderr, "X Error: %s\n", err_msg);
+    return 0;
+}
+
 void create_window(Window win) {
     XWindowAttributes attr;
     XGetWindowAttributes(dpy, win, &attr);
 
     int x = 100, y = 100;
+    int width = attr.width;
+    int height = attr.height;
 
+    // Репарентим окно в root и задаём позицию и размер
     XReparentWindow(dpy, win, root, x, y);
-    XMoveWindow(dpy, win, x, y);
+
+    XWindowChanges changes;
+    changes.x = x;
+    changes.y = y;
+    changes.width = width;
+    changes.height = height;
+    XConfigureWindow(dpy, win, CWX | CWY | CWWidth | CWHeight, &changes);
+
     XMapWindow(dpy, win);
 
-    ClientWindow cw = { win, x, y, attr.width, attr.height };
+    ClientWindow cw = {win, x, y, width, height};
     windows[win] = cw;
 
-    // Подписываемся только на фокус и кнопки без motion events
+    // Подписываемся на события для окна
     XSelectInput(dpy, win, FocusChangeMask | ButtonPressMask | ButtonReleaseMask);
+    
+    printf("Created window %lu at %d,%d size %dx%d\n", win, x, y, width, height);
 }
 
 void handle_map_request(XEvent* ev) {
@@ -41,15 +59,15 @@ void handle_map_request(XEvent* ev) {
 }
 
 void handle_button_press(XEvent* ev) {
-    // Тут ничего не делаем — отключаем drag
+    // Перетаскивание отключено
 }
 
 void handle_motion(XEvent* ev) {
-    // Никакого перемещения
+    // Нет перетаскивания
 }
 
 void handle_button_release(XEvent* ev) {
-    // Никакого drag, ничего не делаем
+    // Нет перетаскивания
 }
 
 void spawn_menu() {
@@ -61,9 +79,16 @@ void spawn_menu() {
 
 int main() {
     dpy = XOpenDisplay(nullptr);
-    if (!dpy) return 1;
+    if (!dpy) {
+        fprintf(stderr, "Cannot open display\n");
+        return 1;
+    }
+
+    XSetErrorHandler(x_error_handler);
 
     root = DefaultRootWindow(dpy);
+
+    // Пытаемся перехватить управление окнами
     XSelectInput(dpy, root, SubstructureRedirectMask | SubstructureNotifyMask);
     XFlush(dpy);
 
@@ -85,6 +110,8 @@ int main() {
                 break;
             case ButtonRelease:
                 handle_button_release(&ev);
+                break;
+            default:
                 break;
         }
     }
