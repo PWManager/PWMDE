@@ -22,14 +22,13 @@ focus_idx = 0
 
 drag_win = None
 drag_start = (0, 0)
-drag_mode = None  # "move" или "resize"
+drag_mode = None
 
 def grab_keys():
     for keysym in KEYS.values():
         code = disp.keysym_to_keycode(keysym)
         root.grab_key(code, MOD, True, X.GrabModeAsync, X.GrabModeAsync)
 
-    # Alt+1..9 для переключения WS
     for i in range(1, 10):
         code = disp.keysym_to_keycode(XK.XK_0 + i)
         root.grab_key(code, MOD, True, X.GrabModeAsync, X.GrabModeAsync)
@@ -70,7 +69,6 @@ def focus_window(index):
 
 def change_workspace(n):
     global current_ws, focus_idx
-    # Скрываем старый WS
     for win in workspaces[current_ws]:
         try:
             win.unmap()
@@ -82,7 +80,6 @@ def change_workspace(n):
     tile_windows()
     focus_window(focus_idx)
 
-    # Сообщаем панели
     with open(IPC_FILE, "w") as f:
         f.write(str(current_ws + 1))
 
@@ -109,7 +106,6 @@ def handle_key(event):
             change_workspace(ws)
 
 def setup():
-    # Подписываемся на нужные события, включая мышь
     root.change_attributes(
         event_mask=X.SubstructureRedirectMask |
                    X.SubstructureNotifyMask |
@@ -120,15 +116,12 @@ def setup():
     )
     grab_keys()
 
-    # Запускаем панель
     subprocess.Popen(["python3", os.path.abspath("desk.py")])
 
-    # Устанавливаем обои (замени путь на свой)
-    wallpaper_path = os.path.expanduser("~/Pictures/wallpaper.jpg")
-    if os.path.exists(wallpaper_path):
-        subprocess.Popen(["feh", "--bg-scale", wallpaper_path])
+    #wallpaper_path = os.path.expanduser("~/Pictures/wallpaper.jpg")
+    #if os.path.exists(wallpaper_path):
+        #subprocess.Popen(["feh", "--bg-scale", wallpaper_path])
 
-    # Инициализация IPC
     with open(IPC_FILE, "w") as f:
         f.write(str(current_ws + 1))
 

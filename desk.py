@@ -31,7 +31,6 @@ root.configure(bg="#222222")
 root.attributes("-topmost", True)
 root.overrideredirect(True)
 
-# Меню приложений
 menu_frame = tk.Frame(root, bg="#222222")
 menu_frame.pack(side="left", padx=5)
 
