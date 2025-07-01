@@ -29,48 +29,52 @@ taskbar.map()
 dragging = None
 
 def create_frame(client):
-    geom = client.get_geometry()
-    width = geom.width
-    height = geom.height
-    x, y = 100, 100
+    try:
+        geom = client.get_geometry()
+        width = geom.width
+        height = geom.height
+        x, y = 100, 100
 
-    frame = root.create_window(
-        x, y,
-        width, height + 24,
-        1,
-        dpy.screen().root_depth,
-        X.InputOutput,
-        X.CopyFromParent,
-        background_pixel=0xaaaaaa,
-        event_mask=X.ExposureMask | X.SubstructureRedirectMask | X.ButtonPressMask | X.ButtonReleaseMask | X.PointerMotionMask
-    )
+        frame = root.create_window(
+            x, y,
+            width, height + 24,
+            1,
+            dpy.screen().root_depth,
+            X.InputOutput,
+            X.CopyFromParent,
+            background_pixel=0xaaaaaa,
+            event_mask=X.ExposureMask | X.SubstructureRedirectMask | X.ButtonPressMask | X.ButtonReleaseMask | X.PointerMotionMask
+        )
 
-    titlebar = frame.create_window(
-        0, 0,
-        width, 24,
-        0,
-        dpy.screen().root_depth,
-        X.InputOutput,
-        X.CopyFromParent,
-        background_pixel=0x444444,
-        event_mask=X.ButtonPressMask | X.ButtonReleaseMask | X.PointerMotionMask
-    )
+        titlebar = frame.create_window(
+            0, 0,
+            width, 24,
+            0,
+            dpy.screen().root_depth,
+            X.InputOutput,
+            X.CopyFromParent,
+            background_pixel=0x444444,
+            event_mask=X.ButtonPressMask | X.ButtonReleaseMask | X.PointerMotionMask
+        )
 
-    # Reparent client window
-    client.reparent(frame, 0, 24)
-    client.map()
-    titlebar.map()
-    frame.map()
+        # Reparent client window
+        client.reparent(frame, 0, 24)
+        client.map()
+        titlebar.map()
+        frame.map()
 
-    windows[client.id] = {
-        'frame': frame,
-        'titlebar': titlebar,
-        'client': client,
-        'is_minimized': False,
-        'geometry': (x, y, width, height)
-    }
+        windows[client.id] = {
+            'frame': frame,
+            'titlebar': titlebar,
+            'client': client,
+            'is_minimized': False,
+            'geometry': (x, y, width, height)
+        }
 
-    dpy.flush()
+        dpy.flush()
+        
+    except:
+        print(f"Error creating frame for client {client.id}", file=sys.stderr)
 
 def minimize_window(client_id):
     win = windows[client_id]
