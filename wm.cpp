@@ -1,6 +1,7 @@
 #include <X11/Xlib.h>
 #include <cstdio>
 #include <cstdlib>
+#include <unistd.h>   // Для fork, execlp, _exit
 #include <map>
 
 struct ClientWindow {
@@ -19,14 +20,24 @@ int x_error_handler(Display* dpy, XErrorEvent* err) {
     return 0;
 }
 
+void spawn_menu() {
+    pid_t pid = fork();
+    if (pid == 0) {
+        // Дочерний процесс
+        execlp("python3", "python3", "desk.py", (char *)nullptr);
+        perror("execlp failed");
+        _exit(1); // Завершаем дочерний процесс с ошибкой
+    } else if (pid < 0) {
+        perror("fork failed");
+    }
+}
+
 void create_window(Window win) {
     int x = 100, y = 100;
 
-    // Репарентим в root и мапим
     XReparentWindow(dpy, win, root, x, y);
     XMapWindow(dpy, win);
 
-    // Подписываемся на StructureNotifyMask, чтобы ловить ConfigureNotify
     XSelectInput(dpy, win, StructureNotifyMask);
 
     windows[win] = {win, x, y, 0, 0};
@@ -53,13 +64,6 @@ void handle_configure_notify(XEvent* ev) {
     }
 }
 
-void spawn_menu() {
-    if (fork() == 0) {
-        execlp("python3", "python3", "desk.py", nullptr);
-        _exit(1);
-    }
-}
-
 int main() {
     dpy = XOpenDisplay(nullptr);
     if (!dpy) {
@@ -71,14 +75,10 @@ int main() {
 
     root = DefaultRootWindow(dpy);
 
-    // Перехватываем попытки создать окна
-    if (XSelectInput(dpy, root, SubstructureRedirectMask | SubstructureNotifyMask) == 0) {
-        fprintf(stderr, "Successfully selected SubstructureRedirectMask on root window\n");
-    } else {
-        fprintf(stderr, "Failed to select SubstructureRedirectMask. Is another WM running?\n");
+    if (XSelectInput(dpy, root, SubstructureRedirectMask | SubstructureNotifyMask) != 0) {
+        fprintf(stderr, "Another window manager is already running\n");
         return 1;
     }
-
     XFlush(dpy);
 
     spawn_menu();
