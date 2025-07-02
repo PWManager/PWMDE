@@ -64,11 +64,11 @@ class WM:
         self.menu_win.clear_area()
         x = 10
         for i, (label, _) in enumerate(MENU_ITEMS):
-            self.menu_win.draw_text(gc, int(x), 20, str(label))
+            self.menu_win.poly_text8(gc, int(x), 20, str(label).encode())
             x += 80
         sw = int(self.root.get_geometry().width)
         clock_x = sw - 120
-        self.menu_win.draw_text(gc, int(clock_x), 20, str(self.clock_text))
+        self.menu_win.poly_text8(gc, int(clock_x), 20, str(self.clock_text).encode())
         self.disp.flush()
 
     def update_clock(self):
