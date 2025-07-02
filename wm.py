@@ -22,6 +22,7 @@ class WM:
         self.focused = 0
         self.running = True
         self.setup()
+        self.spawn_xterm()
 
     def setup(self):
         self.root.change_attributes(event_mask=(X.SubstructureRedirectMask | X.SubstructureNotifyMask | X.ButtonPressMask))
@@ -31,6 +32,9 @@ class WM:
         for keysym in [KEY_J, KEY_K, KEY_ENTER, KEY_Q]:
             keycode = self.disp.keysym_to_keycode(keysym)
             self.root.grab_key(int(keycode), MODKEY, 1, X.GrabModeAsync, X.GrabModeAsync)
+
+    def spawn_xterm(self):
+        subprocess.Popen(['xterm'])
 
     def run(self):
         while self.running:
@@ -69,8 +73,9 @@ class WM:
             if i == 0:
                 win.configure(x=0, y=0, width=master_w, height=sh, border_width=2)
             else:
-                h = sh // (n - 1)
-                win.configure(x=master_w, y=(i-1)*h, width=stack_w, height=h, border_width=2)
+                if n > 1:
+                    h = sh // (n - 1)
+                    win.configure(x=master_w, y=(i-1)*h, width=stack_w, height=h, border_width=2)
             if i == self.focused:
                 win.set_input_focus(X.RevertToPointerRoot, X.CurrentTime)
                 win.configure(border_pixel=int(self.disp.screen().black_pixel))
