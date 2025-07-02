@@ -7,6 +7,8 @@ import subprocess
 import time
 import threading
 from datetime import datetime
+from PIL import Image, ImageDraw, ImageFont
+import numpy as np
 
 MODKEY = int(X.Mod1Mask)
 KEY_J = XK.string_to_keysym('j')
@@ -15,9 +17,8 @@ KEY_ENTER = XK.string_to_keysym('Return')
 KEY_Q = XK.string_to_keysym('q')
 
 MENU_HEIGHT = 28
-MENU_BG = int(0x222222)
-MENU_FG = int(0xffffff)
-MENU_HL = int(0x4444ff)
+MENU_BG = (34, 34, 34)
+MENU_FG = (255, 255, 255)
 MENU_ITEMS = [
     ('XTerm', ['xterm']),
     ('Firefox', ['firefox']),
@@ -33,6 +34,7 @@ class WM:
         self.menu_win = None
         self.clock_text = ''
         self.running = True
+        self.menu_pixmap = None
         self.setup()
         self.start_clock_thread()
 
@@ -53,23 +55,40 @@ class WM:
             self.disp.screen().root_depth,
             X.InputOutput,
             X.CopyFromParent,
-            background_pixel=MENU_BG,
+            background_pixel=self.rgb_to_pixel(MENU_BG),
             event_mask=(X.ExposureMask | X.ButtonPressMask)
         )
         self.menu_win.map()
         self.draw_menu()
 
     def draw_menu(self):
-        gc = self.menu_win.create_gc(foreground=MENU_FG, background=MENU_BG)
-        self.menu_win.clear_area()
+        sw = int(self.root.get_geometry().width)
+        img = Image.new('RGB', (sw, MENU_HEIGHT), MENU_BG)
+        draw = ImageDraw.Draw(img)
+        try:
+            font = ImageFont.truetype("DejaVuSans.ttf", 14)
+        except:
+            font = ImageFont.load_default()
         x = 10
         for i, (label, _) in enumerate(MENU_ITEMS):
-            self.menu_win.poly_text8(gc, int(x), 20, str(label).encode())
+            draw.text((x, 6), label, font=font, fill=MENU_FG)
             x += 80
-        sw = int(self.root.get_geometry().width)
         clock_x = sw - 120
-        self.menu_win.poly_text8(gc, int(clock_x), 20, str(self.clock_text).encode())
+        draw.text((clock_x, 6), self.clock_text, font=font, fill=MENU_FG)
+        data = np.array(img)
+        pixmap = self.menu_win.create_pixmap(sw, MENU_HEIGHT, self.disp.screen().root_depth)
+        gc = self.menu_win.create_gc()
+        # Convert RGB to packed integer for XImage
+        raw = data.astype('uint8').tobytes()
+        image = self.disp.image_from_bytes(raw, sw, MENU_HEIGHT, 24)
+        pixmap.put_image(gc, image, 0, 0, 0, 0, sw, MENU_HEIGHT)
+        self.menu_win.copy_area(pixmap, gc, 0, 0, 0, 0, sw, MENU_HEIGHT)
+        self.menu_pixmap = pixmap
         self.disp.flush()
+
+    def rgb_to_pixel(self, rgb):
+        r, g, b = rgb
+        return (r << 16) | (g << 8) | b
 
     def update_clock(self):
         while self.running:
