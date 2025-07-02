@@ -13,6 +13,9 @@ KEY_J = XK.string_to_keysym('j')
 KEY_K = XK.string_to_keysym('k')
 KEY_ENTER = XK.string_to_keysym('Return')
 KEY_Q = XK.string_to_keysym('q')
+KEY_X = XK.string_to_keysym('x')
+KEY_F = XK.string_to_keysym('f')
+KEY_N = XK.string_to_keysym('n')
 
 class WM:
     def __init__(self):
@@ -29,12 +32,18 @@ class WM:
         self.grab_keys()
 
     def grab_keys(self):
-        for keysym in [KEY_J, KEY_K, KEY_ENTER, KEY_Q]:
+        for keysym in [KEY_J, KEY_K, KEY_ENTER, KEY_Q, KEY_X, KEY_F, KEY_N]:
             keycode = self.disp.keysym_to_keycode(keysym)
             self.root.grab_key(int(keycode), MODKEY, 1, X.GrabModeAsync, X.GrabModeAsync)
 
     def spawn_xterm(self):
         subprocess.Popen(['xterm'])
+
+    def spawn_firefox(self):
+        subprocess.Popen(['firefox'])
+
+    def spawn_nautilus(self):
+        subprocess.Popen(['nautilus'])
 
     def run(self):
         while self.running:
@@ -101,6 +110,12 @@ class WM:
             self.running = False
             self.disp.close()
             sys.exit(0)
+        elif keysym == KEY_X:
+            self.spawn_xterm()
+        elif keysym == KEY_F:
+            self.spawn_firefox()
+        elif keysym == KEY_N:
+            self.spawn_nautilus()
 
 if __name__ == '__main__':
     try:
